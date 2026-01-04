@@ -1,0 +1,1273 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PautaPedia - Calculadora Pediatría</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Merriweather:wght@700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        serif: ['Merriweather', 'serif'],
+                    },
+                    colors: {
+                        pauta: {
+                            DEFAULT: '#2F6B38', // Verde bosque corporativo
+                            dark: '#1e4a25',
+                            light: '#eaf3eb'
+                        }
+                    },
+                    keyframes: {
+                        'bounce-subtle': {
+                            '0%, 100%': { transform: 'translateY(-25%)' },
+                            '50%': { transform: 'translateY(0)' },
+                        },
+                        'fade-in': {
+                            '0%': { opacity: '0' },
+                            '100%': { opacity: '1' },
+                        },
+                        'scale-up': {
+                            '0%': { transform: 'scale(0.95)', opacity: '0' },
+                            '100%': { transform: 'scale(1)', opacity: '1' },
+                        }
+                    },
+                    animation: {
+                        'bounce-subtle': 'bounce-subtle 2s infinite',
+                        'fade-in': 'fade-in 0.2s ease-out',
+                        'scale-up': 'scale-up 0.2s ease-out',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            scroll-behavior: smooth;
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+        }
+        
+        body::-webkit-scrollbar {
+            display: none;
+        }
+
+        input::-webkit-outer-spin-button,
+        input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        input[type=number] {
+            -moz-appearance: textfield;
+        }
+
+        /* --- LÓGICA DE LA TARJETA FLOTANTE (DRAWER) --- */
+        .pauta-drawer {
+            position: fixed;
+            bottom: 1rem; 
+            z-index: 40; 
+            background-color: white;
+            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
+            opacity: 0;
+            pointer-events: none;
+            left: 0.5rem; 
+            right: 0.5rem;
+            transform: translateY(150%);
+            max-height: 80vh; 
+            overflow-y: auto; 
+        }
+
+        @media (min-width: 768px) {
+            .pauta-drawer {
+                bottom: 2rem;
+                left: 50%;
+                right: auto;
+                width: 100%;
+                max-width: 48rem; 
+                transform: translate(-50%, 150%);
+                overflow-y: visible;
+            }
+        }
+
+        .pauta-drawer.visible {
+            opacity: 1;
+            pointer-events: auto;
+            transform: translateY(0);
+        }
+
+        @media (min-width: 768px) {
+            .pauta-drawer.visible {
+                transform: translate(-50%, 0);
+            }
+        }
+        
+        .pauta-content-wrapper {
+            transition: max-height 0.4s ease-in-out, opacity 0.3s ease-in-out;
+            max-height: 2000px; 
+            opacity: 1;
+            overflow: hidden;
+        }
+        .pauta-content-wrapper.collapsed {
+            max-height: 0;
+            opacity: 0;
+            margin-top: 0;
+            margin-bottom: 0;
+        }
+
+        .arrow-icon {
+            transition: transform 0.3s ease;
+            transform-origin: center;
+        }
+        .arrow-btn.collapsed .arrow-icon {
+            transform: rotate(180deg);
+        }
+
+        select:disabled {
+            background-color: #f3f4f6;
+            cursor: not-allowed;
+            color: #9ca3af;
+        }
+        .btn-add {
+            transition: all 0.2s;
+        }
+        .btn-add:active {
+            transform: scale(0.96);
+        }
+        
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        .option-disabled-style {
+            color: #9ca3af;
+            background-color: #f9fafb;
+        }
+        
+        .tab-btn {
+            white-space: nowrap;
+            transition: all 0.2s ease-in-out;
+        }
+        .tab-btn.active {
+            background-color: #2F6B38;
+            color: white;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        .tab-btn:not(.active):hover {
+            background-color: #eaf3eb;
+            color: #2F6B38;
+        }
+        .tab-content {
+            display: none;
+            animation: fadeIn 0.3s ease-out;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Modal Styles */
+        #info-modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 60; 
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+        }
+        #info-modal-overlay.active {
+            display: flex;
+            animation: fade-in 0.2s ease-out;
+        }
+        #info-modal-content {
+            animation: scale-up 0.2s ease-out;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-900 pb-96">
+
+    <!-- HEADER -->
+    <header class="bg-white p-6 shadow-sm border-b border-pauta/20 mb-2 transition-all duration-500" id="main-header">
+        <div class="max-w-6xl mx-auto flex flex-col items-center justify-center">
+            <div class="flex items-center gap-2 mb-1">
+                <img src="https://i.imgur.com/TiTdHzA.png" alt="Logo PautaPedia" class="h-14 md:h-20 w-auto object-contain">
+                <h1 class="text-3xl md:text-5xl font-bold tracking-tight text-pauta leading-none pb-1">PautaPedia</h1>
+            </div>
+            <p class="text-gray-600 font-light italic text-center text-base md:text-lg">Generador de prescripciones domiciliarias pediátricas.</p>
+        </div>
+    </header>
+
+    <!-- MAIN -->
+    <main class="max-w-6xl mx-auto p-4 pt-2 mt-0">
+        
+        <!-- SECCIÓN PESO Y AYUDA -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 items-stretch" id="weight-section-container">
+            <!-- Columna Izquierda: Tarjeta de Peso -->
+            <div class="bg-white rounded-xl shadow-sm border border-pauta/30 p-4 transition-all flex items-center justify-between h-full" id="weight-section">
+                <label for="weight" class="text-base font-bold text-pauta uppercase tracking-wider pl-2">Peso del paciente</label>
+                <div class="relative w-32">
+                    <input type="number" id="weight" step="0.1" min="0" placeholder="0.0" 
+                        class="w-full text-2xl font-bold p-3 pr-8 bg-pauta/5 border border-pauta/30 rounded-lg focus:ring-2 focus:ring-pauta/20 focus:border-pauta outline-none transition-all placeholder:text-pauta/30 text-right text-pauta">
+                    <span class="absolute right-3 top-1/2 -translate-y-1/2 text-pauta/70 font-semibold text-sm">kg</span>
+                </div>
+            </div>
+
+            <!-- Columna Derecha: Enlaces de Ayuda -->
+            <div class="flex flex-col justify-between pl-2 md:pl-6 md:border-l-2 md:border-pauta/10 h-full py-1">
+                <h3 class="text-pauta font-bold text-lg md:text-xl mb-2">¿Dudas acerca de qué pautar?</h3>
+                <div class="flex gap-3 w-full flex-1">
+                    <button onclick="openPopup('https://notebooklm.google.com/notebook/35ce3b81-634e-4867-9de4-2e55dbecc80d')" 
+                        class="bg-white border border-red-200 hover:bg-red-50 text-red-600 font-bold rounded-xl text-sm md:text-base transition-colors shadow-sm flex items-center justify-center gap-2 active:scale-95 flex-1 h-full">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+                        Consulta la SEUP
+                    </button>
+                    <button onclick="openPopup('https://notebooklm.google.com/notebook/61e1096a-6f16-4439-a70b-513612f39ee5')" 
+                        class="bg-white border border-sky-200 hover:bg-sky-50 text-sky-500 font-bold rounded-xl text-sm md:text-base transition-colors shadow-sm flex items-center justify-center gap-2 active:scale-95 flex-1 h-full">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+                        Consulta la SEIP
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- SISTEMA DE PESTAÑAS (ID para anclar scroll) -->
+        <div id="tabs-navigation" class="flex overflow-x-auto space-x-2 pb-2 mb-2 no-scrollbar scroll-mt-4">
+            <button onclick="switchTab('tab-antitermicos')" id="btn-tab-antitermicos" class="tab-btn active flex-1 px-3 py-2 rounded-lg font-bold text-sm border border-pauta/20 flex items-center justify-center gap-2 min-w-[130px]">
+                <span class="text-base">🌡️</span> Antitérmicos
+            </button>
+            <button onclick="switchTab('tab-antibioticos')" id="btn-tab-antibioticos" class="tab-btn flex-1 px-3 py-2 rounded-lg font-bold text-sm border border-pauta/20 text-slate-500 flex items-center justify-center gap-2 min-w-[130px]">
+                <span class="text-base">💊</span> Antibióticos
+            </button>
+            <button onclick="switchTab('tab-antihistaminicos')" id="btn-tab-antihistaminicos" class="tab-btn flex-1 px-3 py-2 rounded-lg font-bold text-sm border border-pauta/20 text-slate-500 flex items-center justify-center gap-2 min-w-[150px]">
+                <span class="text-base">🤧</span> Antihistamínicos
+            </button>
+            <button onclick="switchTab('tab-respiratorio')" id="btn-tab-respiratorio" class="tab-btn flex-1 px-3 py-2 rounded-lg font-bold text-sm border border-pauta/20 text-slate-500 flex items-center justify-center gap-2 min-w-[150px]">
+                <span class="text-base">🫁</span> Asma/Laringitis
+            </button>
+        </div>
+
+        <!-- Contenedores de Contenido -->
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 min-h-[300px]">
+            
+            <!-- 1. ANTITÉRMICOS -->
+            <div id="tab-antitermicos" class="tab-content active p-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    
+                    <!-- PARACETAMOL -->
+                    <div class="p-4 bg-slate-50 rounded-xl border border-slate-200 flex flex-col justify-between hover:border-pauta/40 transition-colors">
+                        <div>
+                            <div class="flex items-center gap-2 mb-3">
+                                <h3 class="font-bold text-lg text-slate-800">Paracetamol</h3>
+                                <button onclick="openInfoModal('para')" class="text-pauta hover:text-pauta-dark transition-colors focus:outline-none" aria-label="Información sobre Paracetamol">
+                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <circle cx="12" cy="12" r="10" fill="currentColor"/>
+                                        <text x="12" y="16.5" font-family="'Merriweather', serif" font-weight="bold" font-size="14" fill="white" text-anchor="middle">i</text>
+                                    </svg>
+                                </button>
+                                <span class="ml-auto text-[9px] bg-pauta/10 text-pauta px-2 py-0.5 rounded-full font-bold uppercase border border-pauta/20">15 mg/kg/dosis</span>
+                            </div>
+                            <div class="space-y-3">
+                                <div>
+                                    <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Dosis</label>
+                                    <select id="para-dose" onchange="updateDrugUI('para')" class="w-full mt-1 p-2 rounded-lg border border-slate-300 bg-white text-xs focus:ring-2 focus:ring-pauta focus:border-pauta outline-none">
+                                        <option value="15">15 mg/kg/dosis</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Presentación</label>
+                                    <select id="para-pres" onchange="updateDrugUI('para')" class="w-full mt-1 p-2 rounded-lg border border-slate-300 bg-white text-xs focus:ring-2 focus:ring-pauta focus:border-pauta outline-none">
+                                        <option value="jarabe_100">Jarabe 100 mg/ml</option>
+                                        <option value="comp_500" data-min-weight="33">Comprimido 500 mg</option>
+                                        <option value="comp_buco_500" data-min-weight="33">Comp. Bucodispersable 500 mg</option>
+                                        <option value="comp_efer_500" data-min-weight="33">Comp. Efervescente 500 mg</option>
+                                        <option value="comp_650" data-min-weight="43">Comprimido 650 mg</option>
+                                        <option value="comp_buco_650" data-min-weight="43">Comp. Bucodispersable 650 mg</option>
+                                        <option value="comp_efer_650" data-min-weight="43">Comp. Efervescente 650 mg</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <button id="btn-add-para" onclick="addToPauta('para')" class="btn-add mt-4 w-full bg-pauta hover:bg-pauta-dark text-white font-bold py-2.5 rounded-xl text-sm flex items-center justify-center gap-2 shadow-sm transition-all duration-200">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+                            Añadir
+                        </button>
+                    </div>
+
+                    <!-- IBUPROFENO -->
+                    <div id="card-ibu" class="p-4 bg-slate-50 rounded-xl border border-slate-200 flex flex-col justify-between hover:border-pauta/40 transition-colors">
+                        <div>
+                            <div class="flex flex-col mb-3">
+                                <div class="flex items-center gap-2">
+                                    <h3 class="font-bold text-lg text-slate-800">Ibuprofeno</h3>
+                                    <!-- Botón Info Ibuprofeno -->
+                                    <button onclick="openInfoModal('ibu')" class="text-pauta hover:text-pauta-dark transition-colors focus:outline-none" aria-label="Información sobre Ibuprofeno">
+                                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                            <circle cx="12" cy="12" r="10" fill="currentColor"/>
+                                            <text x="12" y="16.5" font-family="'Merriweather', serif" font-weight="bold" font-size="14" fill="white" text-anchor="middle">i</text>
+                                        </svg>
+                                    </button>
+                                    <span class="ml-auto text-[9px] bg-pauta/10 text-pauta px-2 py-0.5 rounded-full font-bold uppercase border border-pauta/20">20-40 mg/kg/día</span>
+                                </div>
+                                <p id="ibu-amber-warning" class="hidden text-[10px] text-amber-600 font-bold mt-1 leading-tight">Indicado si su paciente es mayor de 3 meses.</p>
+                            </div>
+                            
+                            <div id="ibu-selectors" class="space-y-3">
+                                <div>
+                                    <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Pauta (Dosis diaria)</label>
+                                    <select id="ibu-dose" onchange="updateDrugUI('ibu')" class="w-full mt-1 p-2 rounded-lg border border-slate-300 bg-white text-xs focus:ring-2 focus:ring-pauta focus:border-pauta outline-none">
+                                        <option value="6.66">20 mg/kg/día</option>
+                                        <option value="10">40 mg/kg/día</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Presentación</label>
+                                    <select id="ibu-pres" onchange="updateDrugUI('ibu')" class="w-full mt-1 p-2 rounded-lg border border-slate-300 bg-white text-xs focus:ring-2 focus:ring-pauta focus:border-pauta outline-none">
+                                        <option value="jarabe_20">Jarabe 20 mg/ml (2%)</option>
+                                        <option value="jarabe_40">Jarabe 40 mg/ml (4%)</option>
+                                        <option value="comp_400" data-min-weight="40">Comprimido 400 mg</option>
+                                        <option value="sobre_400" data-min-weight="40">Sobre 400 mg</option>
+                                        <option value="comp_600" data-min-weight="60">Comprimido 600 mg</option>
+                                        <option value="sobre_600" data-min-weight="60">Sobre 600 mg</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div id="ibu-block-warning" class="hidden p-3 mt-4 bg-red-100 border border-red-200 rounded-lg">
+                                <p class="text-red-700 font-bold text-sm text-center">Peso introducido acorde a un lactante menor de 3 meses, fuera de indicación.</p>
+                            </div>
+                        </div>
+                        <button id="btn-add-ibu" onclick="addToPauta('ibu')" class="btn-add mt-4 w-full bg-pauta hover:bg-pauta-dark text-white font-bold py-2.5 rounded-xl text-sm flex items-center justify-center gap-2 shadow-sm transition-all duration-200">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+                            Añadir
+                        </button>
+                    </div>
+
+                    <!-- METAMIZOL -->
+                    <div id="card-meta" class="p-4 bg-slate-50 rounded-xl border border-slate-200 flex flex-col justify-between hover:border-pauta/40 transition-colors">
+                        <div>
+                            <div class="flex items-center gap-2 mb-3">
+                                <h3 class="font-bold text-lg text-slate-800">Metamizol</h3>
+                                <!-- Botón Info Metamizol -->
+                                <button onclick="openInfoModal('meta')" class="text-pauta hover:text-pauta-dark transition-colors focus:outline-none" aria-label="Información sobre Metamizol">
+                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <circle cx="12" cy="12" r="10" fill="currentColor"/>
+                                        <text x="12" y="16.5" font-family="'Merriweather', serif" font-weight="bold" font-size="14" fill="white" text-anchor="middle">i</text>
+                                    </svg>
+                                </button>
+                                <span class="ml-auto text-[9px] bg-pauta/10 text-pauta px-2 py-0.5 rounded-full font-bold uppercase border border-pauta/20">12,5 mg/kg/dosis</span>
+                            </div>
+                            
+                            <div id="meta-selectors" class="space-y-3">
+                                <div>
+                                    <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Dosis</label>
+                                    <select id="meta-dose" onchange="updateDrugUI('meta')" class="w-full mt-1 p-2 rounded-lg border border-slate-300 bg-white text-xs focus:ring-2 focus:ring-pauta focus:border-pauta outline-none">
+                                        <option value="12.5">12,5 mg/kg/dosis</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Presentación</label>
+                                    <select id="meta-pres" onchange="updateDrugUI('meta')" class="w-full mt-1 p-2 rounded-lg border border-slate-300 bg-white text-xs focus:ring-2 focus:ring-pauta focus:border-pauta outline-none">
+                                        <option value="jarabe_500">Metamizol 500 mg/ml</option>
+                                        <option value="cap_575" data-unit="575">Cápsula 575 mg</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div id="meta-warning" class="hidden p-3 mt-4 bg-red-100 border border-red-200 rounded-lg">
+                                <p class="text-red-700 font-bold text-sm text-center">Peso introducido inferior a 5 kg, fuera de indicación.</p>
+                            </div>
+                        </div>
+                        <button id="btn-add-meta" onclick="addToPauta('meta')" class="btn-add mt-4 w-full bg-pauta hover:bg-pauta-dark text-white font-bold py-2.5 rounded-xl text-sm flex items-center justify-center gap-2 shadow-sm transition-all duration-200">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+                            Añadir
+                        </button>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- 2. ANTIBIÓTICOS (PLACEHOLDER) -->
+            <div id="tab-antibioticos" class="tab-content p-8 text-center text-slate-400 italic">Módulo de Antibióticos en desarrollo...</div>
+            
+            <!-- 3. ANTIHISTAMÍNICOS (PLACEHOLDER) -->
+            <div id="tab-antihistaminicos" class="tab-content p-8 text-center text-slate-400 italic">Módulo de Antihistamínicos en desarrollo...</div>
+            
+            <!-- 4. RESPIRATORIO (NUEVO MÓDULO) -->
+            <div id="tab-respiratorio" class="tab-content p-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    
+                    <!-- TARJETA SALBUTAMOL -->
+                    <div id="card-salbu" class="p-4 bg-slate-50 rounded-xl border border-slate-200 flex flex-col justify-between hover:border-pauta/40 transition-colors">
+                        <div>
+                            <div class="flex items-center gap-2 mb-3">
+                                <h3 class="font-bold text-lg text-slate-800">Salbutamol</h3>
+                                <button onclick="openInfoModal('salbu')" class="text-pauta hover:text-pauta-dark transition-colors focus:outline-none">
+                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <circle cx="12" cy="12" r="10" fill="currentColor"/>
+                                        <text x="12" y="16.5" font-family="'Merriweather', serif" font-weight="bold" font-size="14" fill="white" text-anchor="middle">i</text>
+                                    </svg>
+                                </button>
+                                <span class="ml-auto text-[9px] bg-pauta/10 text-pauta px-2 py-0.5 rounded-full font-bold uppercase border border-pauta/20">100 mcg/dosis</span>
+                            </div>
+                            <div class="space-y-3">
+                                <div>
+                                    <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Técnica de inhalación</label>
+                                    <!-- Importante: 'true' en el segundo argumento para indicar selección manual -->
+                                    <select id="salbu-tec" onchange="updateDrugUI('salbu', true)" class="w-full mt-1 p-2 rounded-lg border border-slate-300 bg-white text-xs focus:ring-2 focus:ring-pauta focus:border-pauta outline-none">
+                                        <option value="mascarilla">Cámara espaciadora y mascarilla</option>
+                                        <option value="boquilla">Cámara espaciadora y boquilla</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <button id="btn-add-salbu" onclick="addToPauta('salbu')" class="btn-add mt-4 w-full bg-pauta hover:bg-pauta-dark text-white font-bold py-2.5 rounded-xl text-sm flex items-center justify-center gap-2 shadow-sm transition-all duration-200">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+                            Añadir
+                        </button>
+                    </div>
+
+                    <!-- TARJETA CORTICOIDE ORAL -->
+                    <div id="card-corti" class="p-4 bg-slate-50 rounded-xl border border-slate-200 flex flex-col justify-between hover:border-pauta/40 transition-colors">
+                        <div>
+                            <div class="flex items-center gap-2 mb-3">
+                                <h3 class="font-bold text-lg text-slate-800">Corticoide Oral</h3>
+                                <button onclick="openInfoModal('corti')" class="text-pauta hover:text-pauta-dark transition-colors focus:outline-none">
+                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <circle cx="12" cy="12" r="10" fill="currentColor"/>
+                                        <text x="12" y="16.5" font-family="'Merriweather', serif" font-weight="bold" font-size="14" fill="white" text-anchor="middle">i</text>
+                                    </svg>
+                                </button>
+                            </div>
+                            
+                            <!-- Selector de Fármaco Principal -->
+                            <div class="mb-3">
+                                <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Fármaco</label>
+                                <select id="corti-drug" onchange="updateCorticoideUI()" class="w-full mt-1 p-2 rounded-lg border border-slate-300 bg-white text-xs focus:ring-2 focus:ring-pauta focus:border-pauta outline-none">
+                                    <option value="pred">Prednisolona/Prednisona</option>
+                                    <option value="dexa">Dexametasona</option>
+                                </select>
+                            </div>
+
+                            <!-- Opciones PREDNISOLONA -->
+                            <div id="corti-pred-opts" class="space-y-3">
+                                <div>
+                                    <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Dosis</label>
+                                    <select id="pred-dose" onchange="updateDrugUI('corti')" class="w-full mt-1 p-2 rounded-lg border border-slate-300 bg-white text-xs focus:ring-2 focus:ring-pauta focus:border-pauta outline-none">
+                                        <option value="1">1 mg/kg/día</option>
+                                        <option value="2">2 mg/kg/día</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Presentación</label>
+                                    <select id="pred-pres" onchange="updateDrugUI('corti')" class="w-full mt-1 p-2 rounded-lg border border-slate-300 bg-white text-xs focus:ring-2 focus:ring-pauta focus:border-pauta outline-none">
+                                        <option value="paidocort">Paidocort jarabe 3 mg/ml</option>
+                                        <option value="estilsona">Estilsona jarabe 7 mg/ml</option>
+                                        <option value="pred_comp_50" data-unit="50" data-lock-rule="pred_50">Prednisona comp. 50 mg</option>
+                                    </select>
+                                </div>
+                                <!-- Duración Prednisolona -->
+                                <div class="bg-white p-2 rounded-lg border border-slate-200">
+                                    <div class="flex gap-2 mb-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                                        <button onclick="togglePredDuration('days')" id="btn-pred-days" class="flex-1 py-1 rounded bg-pauta/10 text-pauta">Días</button>
+                                        <button onclick="togglePredDuration('date')" id="btn-pred-date" class="flex-1 py-1 rounded bg-slate-100 text-slate-400">Fecha Fin</button>
+                                    </div>
+                                    <input type="number" id="pred-days-input" placeholder="Nº días" class="w-full p-2 text-xs border border-slate-300 rounded focus:ring-2 focus:ring-pauta outline-none" min="1">
+                                    <input type="date" id="pred-date-input" class="w-full p-2 text-xs border border-slate-300 rounded focus:ring-2 focus:ring-pauta outline-none hidden">
+                                </div>
+                            </div>
+
+                            <!-- Opciones DEXAMETASONA -->
+                            <div id="corti-dexa-opts" class="space-y-3 hidden">
+                                <div>
+                                    <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Indicación</label>
+                                    <select id="dexa-ind" onchange="updateDrugUI('corti')" class="w-full mt-1 p-2 rounded-lg border border-slate-300 bg-white text-xs focus:ring-2 focus:ring-pauta focus:border-pauta outline-none">
+                                        <option value="laringitis">Laringitis</option>
+                                        <option value="asma">Asma</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Dosis</label>
+                                    <select id="dexa-dose" onchange="updateDrugUI('corti')" class="w-full mt-1 p-2 rounded-lg border border-slate-300 bg-white text-xs focus:ring-2 focus:ring-pauta focus:border-pauta outline-none">
+                                        <option value="0.15">0.15 mg/kg/dosis</option>
+                                        <option value="0.3" selected>0.3 mg/kg/dosis</option>
+                                        <option value="0.6">0.6 mg/kg/dosis</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Presentación</label>
+                                    <select id="dexa-pres" onchange="updateDrugUI('corti')" class="w-full mt-1 p-2 rounded-lg border border-slate-300 bg-white text-xs focus:ring-2 focus:ring-pauta focus:border-pauta outline-none">
+                                        <option value="dexa_jarabe">Jarabe 1 mg/ml</option>
+                                        <option value="dexa_comp" data-min-weight="40">Comprimidos</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                        </div>
+                        <button id="btn-add-corti" onclick="addToPauta('corti')" class="btn-add mt-4 w-full bg-pauta hover:bg-pauta-dark text-white font-bold py-2.5 rounded-xl text-sm flex items-center justify-center gap-2 shadow-sm transition-all duration-200">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+                            Añadir
+                        </button>
+                    </div>
+
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- VENTANA EMERGENTE DE PAUTA (DRAWER FLOTANTE COMPACTO Y RESPONSIVE) -->
+    <div id="pauta-container" class="pauta-drawer shadow-[0_10px_40px_-10px_rgba(0,0,0,0.3)] border border-pauta/30 p-3 md:p-4 rounded-2xl">
+        <div class="flex flex-col w-full">
+            <!-- CABECERA DE LA TARJETA -->
+            <div class="flex flex-wrap items-center justify-between gap-y-3 mb-2 w-full">
+                
+                <div class="flex items-center gap-2 flex-wrap flex-1 min-w-0">
+                    <div id="collapse-arrow-btn" class="arrow-btn animate-bounce-subtle text-pauta p-1.5 rounded-full hover:bg-pauta/10 transition-all cursor-pointer bg-pauta/5 flex-shrink-0" onclick="togglePautaCollapse()">
+                        <svg class="arrow-icon w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </div>
+                    <h4 class="font-bold text-xs md:text-sm text-pauta select-none cursor-pointer flex-shrink-0 truncate" onclick="togglePautaCollapse()">
+                        Pauta Final
+                    </h4>
+                    <span id="pauta-weight-info" class="text-[10px] md:text-xs font-semibold text-pauta/80 bg-pauta/10 px-2 py-0.5 rounded-md border border-pauta/20 flex-shrink-0 whitespace-nowrap"></span>
+                    <button id="btn-toggle-fever" onclick="togglePainOnlyMode()" class="hidden text-[10px] md:text-xs font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2 py-0.5 rounded-md transition-colors flex items-center gap-1 shadow-sm whitespace-nowrap flex-shrink-0">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                        Solo dolor
+                    </button>
+                </div>
+
+                <button onclick="clearPauta()" class="bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-700 px-2 py-1 md:px-3 md:py-1.5 rounded-lg text-[10px] md:text-xs font-bold transition-colors border border-red-200 whitespace-nowrap flex-shrink-0 ml-auto">
+                    Borrar
+                </button>
+            </div>
+            
+            <div id="pauta-collapsible" class="pauta-content-wrapper w-full">
+                <div id="pauta-text" class="bg-pauta/10 p-3 rounded-xl text-slate-800 text-xs md:text-sm leading-relaxed mb-3 border border-pauta/20 font-medium min-h-[50px] shadow-inner mt-1 w-full break-words"></div>
+                <button onclick="copyAndReset()" class="w-full bg-pauta hover:bg-pauta-dark text-white font-bold py-2.5 md:py-3.5 rounded-xl text-xs md:text-sm flex items-center justify-center gap-2 shadow-lg active:scale-[0.98] transition-all">
+                    <svg class="w-4 h-4 md:w-5 md:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path></svg>
+                    Copiar Pauta y Reiniciar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DE INFORMACIÓN -->
+    <div id="info-modal-overlay" class="hidden" onclick="closeInfoModal()">
+        <div id="info-modal-content" class="bg-white rounded-2xl shadow-2xl w-11/12 max-w-2xl max-h-[80vh] flex flex-col overflow-hidden" onclick="event.stopPropagation()">
+            <div class="p-4 border-b border-gray-100 flex justify-between items-center bg-pauta/5">
+                <h3 id="info-modal-title" class="text-xl font-bold text-pauta">Acerca de...</h3>
+                <button onclick="closeInfoModal()" class="text-gray-400 hover:text-gray-600 transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            <div id="info-modal-body" class="p-6 overflow-y-auto text-sm text-gray-700 leading-relaxed space-y-4"></div>
+            <div class="p-4 border-t border-gray-100 bg-gray-50 text-right">
+                <button onclick="closeInfoModal()" class="px-4 py-2 bg-pauta text-white rounded-lg font-bold hover:bg-pauta-dark transition-colors text-sm">
+                    Entendido
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Variables Globales
+        let isPainOnlyMode = false;
+        let selectedMeds = { para: null, ibu: null, meta: null, salbu: null, corti: null };
+        let pautaPeekTimeout;
+        const pautaContainer = document.getElementById('pauta-container');
+
+        // Configuración Fármacos
+        const drugConfig = {
+            para: { 
+                name: "PARACETAMOL", 
+                maxDoseCap: 650, 
+                presentations: { 
+                    jarabe_100: { label: "jarabe 100 mg/ml", conc: 100, type: 'liq' }, 
+                    comp_500: { label: "comprimidos 500 mg", unit: 500, type: 'sol' },
+                    comp_buco_500: { label: "comprimidos bucodispersables 500 mg", unit: 500, type: 'sol' },
+                    comp_efer_500: { label: "comprimidos efervescentes 500 mg", unit: 500, type: 'sol' },
+                    comp_650: { label: "comprimidos 650 mg", unit: 650, type: 'sol' },
+                    comp_buco_650: { label: "comprimidos bucodispersables 650 mg", unit: 650, type: 'sol' },
+                    comp_efer_650: { label: "comprimidos efervescentes 650 mg", unit: 650, type: 'sol' }
+                } 
+            },
+            ibu: { 
+                name: "IBUPROFENO", 
+                presentations: { 
+                    jarabe_20: { label: "jarabe 20 mg/ml", conc: 20, type: 'liq' }, 
+                    jarabe_40: { label: "jarabe 40 mg/ml", conc: 40, type: 'liq' }, 
+                    comp_400: { label: "comprimidos 400 mg", unit: 400, type: 'sol' }, 
+                    sobre_400: { label: "sobres 400 mg", unit: 400, type: 'sol' }, 
+                    comp_600: { label: "comprimidos 600 mg", unit: 600, type: 'sol' }, 
+                    sobre_600: { label: "sobres 600 mg", unit: 600, type: 'sol' } 
+                } 
+            },
+            meta: { 
+                name: "METAMIZOL", 
+                maxDoseCap: 600, 
+                presentations: { 
+                    jarabe_500: { label: "jarabe 500 mg/ml", conc: 500, type: 'liq' }, 
+                    cap_575: { label: "cápsulas 575 mg", unit: 575, type: 'sol' } 
+                } 
+            }
+        };
+
+        const drugInfo = {
+            para: `
+                <p>Dosis indicada como <strong>antipirético/analgésico</strong> de <strong>15 mg/kg/6-8h</strong> (posibilidad de administrar 10 mg/kg/4h a partir de los 10 días de vida), con <strong>dosis máxima</strong> de <strong>60 mg/kg/día</strong> en <10 años, y de <strong>2600 mg/día</strong> en >10 años ó >43 kg.</p>
+                <p>Las <strong>presentaciones alternativas</strong> al jarabe se desbloquean en la web cuando el peso es acorde para su administración, manteniéndose como <strong>opción por defecto el jarabe</strong>. Considere su empleo según las <strong>preferencias individuales</strong> del paciente y su familia.</p>
+            `,
+            ibu: `
+                <p>Dosis indicada como <strong>antipirético/analgésico</strong> de <strong>5-10 mg/kg/6-8h</strong>, con <strong>dosis máxima</strong> en <40 kg de <strong>40 mg/kg/día</strong>; en >40 kg dosis indicada de <strong>400 mg/6-8h</strong>; en >60 kg se podrían emplear hasta <strong>600 mg/6-8h</strong> (máximo diario de <strong>2.400 mg/día</strong>).</p>
+                <p>Para la dosis de la web de <strong>20 mg/kg/día</strong>, para que coincida con la regla habitual de cálculo de peso/3 ó peso/6, el cálculo se realiza a <strong>6,66 mg/kg/dosis</strong> (lo que implicaría 20 mg/kg/día si se administra cada 8 horas, y 26,67 mg/kg/día si se administra cada 6 horas).</p>
+                <p>Indicado en <strong>>3 meses</strong> de vida.</p>
+                <p>Las <strong>presentaciones alternativas</strong> al jarabe se desbloquean en la web cuando el peso es acorde para su administración, manteniéndose como <strong>opción por defecto el jarabe</strong>. Considere su empleo según las <strong>preferencias individuales</strong> del paciente y su familia.</p>
+            `,
+            meta: `
+                <p>Dosis indicada como <strong>analgésico</strong> variable según la fuente consultada (<strong>8-16 mg/kg/6-8h</strong> y <strong>12,5-20 mg/kg/6-8h</strong>), como <strong>antipirético</strong> la dosis de <strong>10 mg/kg/6-8h</strong> podría ser suficiente. <strong>Dosis máxima diaria</strong> sugerida también variable (<strong>3,45-6 g/día</strong>).</p>
+                <p>Indicado en <strong>>5 kg</strong> ó <strong>>3 meses</strong> de vida.</p>
+                <p>Las <strong>presentaciones alternativas</strong> al jarabe se desbloquean en la web cuando el peso es acorde para su administración, manteniéndose como <strong>opción por defecto el jarabe</strong>. Considere su empleo según las <strong>preferencias individuales</strong> del paciente y su familia.</p>
+            `,
+            salbu: `<p>Dosis indicada en crisis leve de <strong>2-4 inhalaciones</strong>.</p>
+                <p>En pacientes menores de <strong>12 kg</strong> y <strong>9 kg</strong> la web indica la administración domiciliaria de <strong>2-3</strong> y <strong>2 inhalaciones</strong> respectivamente al tratarse de pacientes de menor peso.</p>
+                <p>En los mayores de <strong>12 kg</strong>, se indican <strong>2-4 inhalaciones</strong>, y se explica la posibilidad de realizar <strong>3 tandas cada 20 minutos</strong> en domicilio en el caso de presentar una crisis moderada.</p>
+                <p>A continuación se detallan las técnicas de inhalación indicadas según la edad del paciente (en el caso de presentar un desarrollo psicomotor normal):</p>
+
+                <h4 class="font-bold mt-2 mb-1 text-pauta">TÉCNICA CON CÁMARA ESPACIADORA + MASCARILLA para <4 años</h4>
+                <ul class="list-disc pl-5 space-y-1">
+                <li>Mantener al paciente sentado o de pie para facilitar una correcta expansión del tórax. Si es un niño pequeño, apoyar su cabeza sobre el brazo del cuidador.</li>
+                <li>Retirar la tapa del inhalador y agitarlo antes de conectarlo a la cámara.</li>
+                <li>Situar la mascarilla alrededor de la boca y de la nariz del paciente, manteniéndola sellada sobre la cara. Apretar el pulsador <strong>UNA VEZ</strong> con la cámara horizontal y el inhalador en vertical.</li>
+                <li>Mantener la posición de la mascarilla mientras el paciente respira observando la movilidad de la válvula. Pueden ser válidas <strong>5 respiraciones</strong> o <strong>10 segundos</strong> respirando a volumen corriente.</li>
+                <li>Repetir los pasos para cada dosis con intervalos de <strong>30-60 segundos</strong> entre dosis.</li>
+                <li>Retirar el inhalador y cerrar el dispositivo con la tapa protectora.</li>
+                <li>SOLO en el caso de haber administrado un corticoide inhalado: Limpiar la boca y la zona de contacto de la mascarilla con una gasa humedecida con agua, y ofrecer agua o lavar los dientes al terminar.</li>
+                </ul>
+
+                <h4 class="font-bold mt-4 mb-1 text-pauta">TÉCNICA CON CÁMARA ESPACIADORA + BOQUILLA (Respiraciones múltiples) para pacientes de 4-8 años</h4>
+                <ul class="list-disc pl-5 space-y-1">
+                <li>Retirar la tapa del inhalador y agitarlo antes de conectarlo a la cámara. Insertar el inhalador en el extremo de la cámara.</li>
+                <li>Situar la boquilla en la boca del paciente, cerrando bien los labios.</li>
+                <li>Apretar el pulsador <strong>UNA VEZ</strong> con la cámara horizontal y el inhalador vertical.</li>
+                <li>Realizar <strong>5 respiraciones LENTAS y PROFUNDAS</strong> comprobando que la válvula de la cámara se mueve con cada respiración.</li>
+                <li>Repetir los pasos 1-4 para cada dosis con intervalos de <strong>30-60 segundos</strong> entre dosis.</li>
+                <li>Cerrar el dispositivo con la tapa protectora.</li>
+                <li>SOLO en el caso de haber administrado un corticoide inhalado: Enjuagar la boca con agua o lavarse los dientes al terminar.</li>
+                </ul>
+
+                <h4 class="font-bold mt-4 mb-1 text-pauta">TÉCNICA CON CÁMARA ESPACIADORA + BOQUILLA (Respiración única + apnea posterior) para >8 años</h4>
+                <ul class="list-disc pl-5 space-y-1">
+                <li>Quitar la tapa de la pieza bucal y agitar el inhalador.</li>
+                <li>Acoplar el inhalador a la cámara, colocándolo en posición vertical, con la boquilla en la parte inferior.</li>
+                <li>Vaciar los pulmones <strong>LENTA Y PROFUNDAMENTE</strong> hasta donde sea cómodo.</li>
+                <li>Colocar la boquilla de la cámara entre los labios y los dientes evitando que la lengua la obstruya.</li>
+                <li>Presionar <strong>UNA VEZ</strong> el cartucho presurizado.</li>
+                <li>Comenzar a inhalar <strong>LENTA Y PROFUNDAMENTE</strong> a través de la boca.</li>
+                <li>Retirar la boquilla de la boca.</li>
+                <li>Aguantar la respiración <strong>10 segundos</strong> (como mínimo 5 segundos) y expulsar el aire lentamente.</li>
+                <li>Como alternativa, si no se logra coordinación o presenta una crisis importante con dificultad para aguantar la respiración, se puede considerar la posibilidad de efectuar <strong>4-5 respiraciones LENTAS</strong> seguidas.</li>
+                <li>Si se precisan nuevas dosis esperar un mínimo de <strong>30 segundos</strong>. Repetir pasos desde el punto 1.</li>
+                <li>Cerrar el dispositivo con la tapa protectora.</li>
+                <li>SOLO en el caso de haber administrado un corticoide inhalado: Enjuagar la boca con agua o lavarse los dientes al terminar.</li>
+                </ul>`, 
+            corti: `<h4 class="font-bold mb-1 text-pauta">Prednisolona/Prednisona</h4>
+                <ul class="list-disc pl-5 space-y-1 mb-4">
+                <li>Dosis indicada para <strong>asma</strong>: <strong>1-2 mg/kg/día</strong> durante <strong>3-5 días</strong> (en adolescentes 5-7 días), máximo de <strong>50 mg/día</strong>.</li>
+                <li>Dosis indicada para <strong>laringitis</strong>: <strong>1 mg/kg/día</strong> durante <strong>3 días</strong>, máximo de <strong>40-50 mg/día</strong>.</li>
+                <li>Disponibles en España las presentaciones en jarabe de Prednisolona con concentración de <strong>3 mg/ml</strong> (<strong>Paidocort</strong>, opción por defecto por su mejor palatabilidad) y <strong>7 mg/ml</strong> (<strong>Estilsona</strong>).</li>
+                <li><strong>Prednisona</strong> es equivalente a prednisolona, y se encuentra disponible en <strong>comprimidos de 50 mg</strong>.</li>
+                <li>La presentación de Prednisona comprimidos se desbloquea cuando el peso es acorde para su administración, manteniéndose como opción por defecto Paidocort. Considere su empleo según las preferencias individuales del paciente y su familia.</li>
+                </ul>
+
+                <h4 class="font-bold mb-1 text-pauta">Dexametasona</h4>
+                <ul class="list-disc pl-5 space-y-1">
+                <li>Dosis indicada para <strong>laringitis</strong>: <strong>0,15-0,6 mg/Kg</strong> en dosis única, máximo de <strong>10 mg</strong>.</li>
+                <li>Dosis indicada para <strong>asma</strong>: <strong>0,6 mg/kg/24h</strong> durante <strong>2 días</strong>, máximo de <strong>12 mg/día</strong>.</li>
+                <li>Disponible en España <strong>jarabe de 1 mg/ml</strong> y <strong>comprimidos de 2-4-8 mg</strong>.</li>
+                <li>Las presentaciones de Dexametasona comprimidos se desbloquean a partir de los <strong>40 kg</strong>, indicándose la combinación de comprimidos adecuada para alcanzar la dosis máxima según la patología elegida, manteniéndose como opción por defecto el jarabe. Considere su empleo según las preferencias individuales del paciente y su familia.</li>
+                </ul>` 
+        };
+
+        const drugNames = {
+            para: "Acerca de Paracetamol",
+            ibu: "Acerca de Ibuprofeno",
+            meta: "Acerca de Metamizol",
+            salbu: "Acerca de Salbutamol",
+            corti: "Acerca de los Corticoides Orales"
+        };
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('active');
+                btn.classList.add('text-slate-500'); 
+            });
+            document.getElementById(tabId).classList.add('active');
+            const activeBtn = document.getElementById('btn-' + tabId);
+            activeBtn.classList.add('active');
+            activeBtn.classList.remove('text-slate-500');
+        }
+
+        function openPopup(url) {
+            const width = 800;
+            const height = 600;
+            const left = (screen.width - width) / 2;
+            const top = (screen.height - height) / 2;
+            window.open(url, '_blank', `width=${width},height=${height},top=${top},left=${left},resizable=yes,scrollbars=yes`);
+        }
+
+        function openInfoModal(drugId) {
+            const modalOverlay = document.getElementById('info-modal-overlay');
+            const modalTitle = document.getElementById('info-modal-title');
+            const modalBody = document.getElementById('info-modal-body');
+
+            if (drugInfo[drugId]) {
+                modalTitle.innerText = drugNames[drugId];
+                modalBody.innerHTML = drugInfo[drugId];
+                modalOverlay.classList.add('active');
+                document.body.style.overflow = 'hidden';
+            }
+        }
+
+        function closeInfoModal() {
+            const modalOverlay = document.getElementById('info-modal-overlay');
+            modalOverlay.classList.remove('active');
+            document.body.style.overflow = '';
+        }
+
+        function togglePainOnlyMode() {
+            isPainOnlyMode = !isPainOnlyMode;
+            const btn = document.getElementById('btn-toggle-fever');
+            if (isPainOnlyMode) {
+                btn.innerHTML = `<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg> Si fiebre/dolor`;
+            } else {
+                btn.innerHTML = `<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg> Solo si dolor`;
+            }
+            renderPautaUI(); 
+        }
+
+        // --- FUNCIONES DE DESPLIEGUE/REPLIEGUE ---
+        function expandPauta() {
+            const content = document.getElementById('pauta-collapsible');
+            const arrowBtn = document.getElementById('collapse-arrow-btn');
+            content.classList.remove('collapsed');
+            arrowBtn.classList.remove('collapsed');
+        }
+
+        function collapsePauta() {
+            const content = document.getElementById('pauta-collapsible');
+            const arrowBtn = document.getElementById('collapse-arrow-btn');
+            content.classList.add('collapsed');
+            arrowBtn.classList.add('collapsed');
+        }
+
+        function togglePautaCollapse() {
+            const content = document.getElementById('pauta-collapsible');
+            if (content.classList.contains('collapsed')) {
+                expandPauta();
+            } else {
+                collapsePauta();
+            }
+        }
+
+        // Event Listeners para Hover (Vistazo Rápido)
+        pautaContainer.addEventListener('mouseenter', () => {
+            clearTimeout(pautaPeekTimeout);
+            expandPauta();
+        });
+
+        pautaContainer.addEventListener('mouseleave', () => {
+            collapsePauta();
+        });
+
+        function openPautaContent() {
+             expandPauta();
+        }
+
+        function resetButton(drugId) {
+            const btn = document.getElementById('btn-add-' + drugId);
+            if (btn) {
+                btn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg> Añadir';
+            }
+        }
+
+        function setButtonAdded(drugId) {
+            const btn = document.getElementById('btn-add-' + drugId);
+            if (btn) {
+                btn.innerHTML = `
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    Añadido
+                `;
+            }
+        }
+
+        function clearPauta() {
+            selectedMeds = { para: null, ibu: null, meta: null, salbu: null, corti: null };
+            isPainOnlyMode = false;
+            document.getElementById('btn-toggle-fever').classList.add('hidden');
+            document.getElementById('weight').value = "";
+            document.getElementById('pauta-text').innerHTML = "";
+            document.getElementById('pauta-weight-info').innerText = ""; 
+            document.getElementById('pauta-container').classList.remove('visible');
+            document.getElementById('pred-days-input').value = "";
+            document.getElementById('pred-date-input').value = "";
+            expandPauta(); 
+            
+            document.querySelectorAll('select').forEach(sel => sel.selectedIndex = 0);
+            
+            ['para', 'ibu', 'meta', 'salbu', 'corti'].forEach(id => resetButton(id));
+            updateCorticoideUI();
+            updateDrugUI('para'); updateDrugUI('ibu'); updateDrugUI('meta'); updateDrugUI('salbu'); updateDrugUI('corti');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        document.getElementById('weight').addEventListener('input', () => {
+            const weightVal = parseFloat(document.getElementById('weight').value);
+            const banner = document.getElementById('pauta-weight-info');
+            if(banner) banner.innerText = weightVal ? `Peso: ${weightVal} kg` : '';
+
+            const ibuSelect = document.getElementById('ibu-pres');
+            if (ibuSelect.value === 'jarabe_20' || ibuSelect.value === 'jarabe_40') {
+                if (weightVal >= 25) { if (ibuSelect.value === 'jarabe_20') { ibuSelect.value = 'jarabe_40'; resetButton('ibu'); } } 
+                else if (weightVal > 0 && weightVal < 25) { if (ibuSelect.value === 'jarabe_40') { ibuSelect.value = 'jarabe_20'; resetButton('ibu'); } }
+            }
+
+            if (Object.values(selectedMeds).some(v => v !== null)) clearPauta();
+            
+            document.getElementById('pred-days-input').value = "";
+            document.getElementById('pred-date-input').value = "";
+
+            updateDrugUI('para'); updateDrugUI('ibu'); updateDrugUI('meta'); updateDrugUI('salbu'); updateDrugUI('corti');
+        });
+
+        function updateCorticoideUI() {
+            resetButton('corti');
+            const drug = document.getElementById('corti-drug').value;
+            if (drug === 'pred') {
+                document.getElementById('corti-pred-opts').classList.remove('hidden');
+                document.getElementById('corti-dexa-opts').classList.add('hidden');
+            } else {
+                document.getElementById('corti-pred-opts').classList.add('hidden');
+                document.getElementById('corti-dexa-opts').classList.remove('hidden');
+                const ind = document.getElementById('dexa-ind').value;
+                const doseSelect = document.getElementById('dexa-dose');
+                if (ind === 'laringitis') doseSelect.value = "0.3"; 
+            }
+            updateDrugUI('corti');
+        }
+
+        let predDurationMode = 'days';
+        function togglePredDuration(mode) {
+            predDurationMode = mode;
+            const btnDays = document.getElementById('btn-pred-days');
+            const btnDate = document.getElementById('btn-pred-date');
+            const inputDays = document.getElementById('pred-days-input');
+            const inputDate = document.getElementById('pred-date-input');
+
+            if (mode === 'days') {
+                btnDays.classList.add('bg-pauta/10', 'text-pauta'); btnDays.classList.remove('bg-slate-100', 'text-slate-400');
+                btnDate.classList.add('bg-slate-100', 'text-slate-400'); btnDate.classList.remove('bg-pauta/10', 'text-pauta');
+                inputDays.classList.remove('hidden'); inputDate.classList.add('hidden');
+            } else {
+                btnDate.classList.add('bg-pauta/10', 'text-pauta'); btnDate.classList.remove('bg-slate-100', 'text-slate-400');
+                btnDays.classList.add('bg-slate-100', 'text-slate-400'); btnDays.classList.remove('bg-pauta/10', 'text-pauta');
+                inputDays.classList.add('hidden'); inputDate.classList.remove('hidden');
+            }
+        }
+
+        function getEffectiveMg(drugId, weight, dosePerKg) {
+            if (drugId === 'ibu') {
+                if (weight >= 60) return 600;
+                if (weight >= 40) return 400; 
+                
+                let raw = weight * dosePerKg;
+                let max = 400; 
+                return raw > max ? max : raw;
+            }
+            if (drugConfig[drugId]) {
+                let max = drugConfig[drugId].maxDoseCap;
+                let raw = weight * dosePerKg;
+                return max && raw > max ? max : raw;
+            }
+            return weight * dosePerKg;
+        }
+
+        function formatPediatricVolume(value) {
+            const rounded = Number(value.toFixed(1));
+            return rounded.toString().replace('.', ',');
+        }
+
+        function updateDrugUI(drugId, isManual = false) {
+            resetButton(drugId);
+            const weight = parseFloat(document.getElementById('weight').value);
+            
+            if (['para', 'ibu', 'meta'].includes(drugId)) {
+                const select = document.getElementById(drugId + '-pres');
+                const dose = parseFloat(document.getElementById(drugId + '-dose').value);
+                
+                if (!weight || weight <= 0) {
+                    Array.from(select.options).forEach(opt => { opt.disabled = false; opt.classList.remove('option-disabled-style'); });
+                    return;
+                }
+                
+                if (drugId === 'meta') {
+                    const card = document.getElementById('card-meta');
+                    const warning = document.getElementById('meta-warning');
+                    const btn = document.getElementById('btn-add-meta');
+                    if (weight < 5) {
+                        card.classList.add('bg-red-50', 'border-red-200'); card.classList.remove('bg-slate-50', 'border-slate-200');
+                        document.getElementById('meta-selectors').classList.add('hidden');
+                        btn.classList.add('hidden');
+                        warning.classList.remove('hidden');
+                        return;
+                    } else {
+                        card.classList.remove('bg-red-50', 'border-red-200'); card.classList.add('bg-slate-50', 'border-slate-200');
+                        document.getElementById('meta-selectors').classList.remove('hidden');
+                        btn.classList.remove('hidden');
+                        warning.classList.add('hidden');
+                    }
+                }
+
+                if (drugId === 'ibu') {
+                    const card = document.getElementById('card-ibu');
+                    const blockWarning = document.getElementById('ibu-block-warning');
+                    const amberWarning = document.getElementById('ibu-amber-warning');
+                    const btn = document.getElementById('btn-add-ibu');
+                    if (weight < 4.5) {
+                        card.classList.add('bg-red-50', 'border-red-200'); card.classList.remove('bg-slate-50', 'border-slate-200');
+                        document.getElementById('ibu-selectors').classList.add('hidden');
+                        btn.classList.add('hidden');
+                        blockWarning.classList.remove('hidden'); amberWarning.classList.add('hidden');
+                        return;
+                    } else {
+                        card.classList.remove('bg-red-50', 'border-red-200'); card.classList.add('bg-slate-50', 'border-slate-200');
+                        document.getElementById('ibu-selectors').classList.remove('hidden');
+                        btn.classList.remove('hidden');
+                        blockWarning.classList.add('hidden');
+                        if (weight <= 8.5) amberWarning.classList.remove('hidden'); else amberWarning.classList.add('hidden');
+                    }
+                }
+
+                const effectiveMg = getEffectiveMg(drugId, weight, dose);
+
+                Array.from(select.options).forEach(opt => {
+                    const minW = parseFloat(opt.dataset.minWeight);
+                    if (!isNaN(minW)) {
+                        if (weight >= minW) {
+                            opt.disabled = false; opt.classList.remove('option-disabled-style');
+                        } else {
+                            opt.disabled = true; opt.classList.add('option-disabled-style');
+                        }
+                    } else {
+                        const unitValue = parseFloat(opt.dataset.unit);
+                        if (!isNaN(unitValue)) {
+                             const margin = unitValue * 0.15; 
+                             const isFavorable = Math.abs(effectiveMg - unitValue) <= margin;
+                             if (isFavorable || effectiveMg >= unitValue) {
+                                opt.disabled = false; opt.classList.remove('option-disabled-style');
+                             } else {
+                                opt.disabled = true; opt.classList.add('option-disabled-style');
+                             }
+                        }
+                    }
+                });
+                if (select.selectedOptions[0].disabled) select.selectedIndex = 0;
+            }
+
+            if (drugId === 'salbu') {
+                const tecSelect = document.getElementById('salbu-tec');
+                if (!weight || weight <= 0) return;
+                
+                const boquillaOpt = tecSelect.querySelector('option[value="boquilla"]');
+                if (weight < 12) {
+                    boquillaOpt.disabled = true;
+                    if (tecSelect.value === 'boquilla') tecSelect.value = 'mascarilla';
+                } else {
+                    boquillaOpt.disabled = false;
+                }
+                
+                if (!isManual) {
+                    if (weight >= 20) {
+                        tecSelect.value = 'boquilla';
+                    } else {
+                        tecSelect.value = 'mascarilla';
+                    }
+                }
+            }
+
+            if (drugId === 'corti') {
+                const drug = document.getElementById('corti-drug').value;
+                if (drug === 'pred') {
+                    const dose = parseFloat(document.getElementById('pred-dose').value);
+                    const presSelect = document.getElementById('pred-pres');
+                    const comp50Opt = presSelect.querySelector('option[value="pred_comp_50"]');
+                    
+                    if (!weight || weight <= 0) { comp50Opt.disabled = true; return; }
+
+                    let unlocked = false;
+                    if (dose === 1 && weight >= 50) unlocked = true;
+                    if (dose === 2 && weight >= 40) unlocked = true;
+
+                    if (unlocked) {
+                        comp50Opt.disabled = false; comp50Opt.classList.remove('option-disabled-style');
+                    } else {
+                        comp50Opt.disabled = true; comp50Opt.classList.add('option-disabled-style');
+                        if (presSelect.value === 'pred_comp_50') presSelect.value = 'paidocort';
+                    }
+                } else if (drug === 'dexa') {
+                    const ind = document.getElementById('dexa-ind').value;
+                    const doseSelect = document.getElementById('dexa-dose');
+                    const presSelect = document.getElementById('dexa-pres');
+                    const compOpt = presSelect.querySelector('option[value="dexa_comp"]');
+
+                    Array.from(doseSelect.options).forEach(opt => {
+                        const val = parseFloat(opt.value);
+                        if (ind === 'laringitis') {
+                            opt.disabled = false; opt.hidden = false;
+                        } else {
+                            if (val === 0.6) { opt.disabled = false; opt.hidden = false; opt.selected = true; } 
+                            else { opt.disabled = true; opt.hidden = true; }
+                        }
+                    });
+
+                    if (weight < 40) {
+                        compOpt.disabled = true;
+                        compOpt.classList.add('option-disabled-style');
+                        if (presSelect.value === 'dexa_comp') presSelect.value = 'dexa_jarabe';
+                    } else {
+                        compOpt.disabled = false;
+                        compOpt.classList.remove('option-disabled-style');
+                    }
+                }
+            }
+        }
+
+        function addToPauta(drugId) {
+            const weight = parseFloat(document.getElementById('weight').value);
+            if (!weight || isNaN(weight) || weight <= 0) {
+                const weightSection = document.getElementById('weight-section');
+                weightSection.classList.add('ring-4', 'ring-red-200', 'border-red-400');
+                setTimeout(() => weightSection.classList.remove('ring-4', 'ring-red-200', 'border-red-400'), 2000);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+                return;
+            }
+            document.getElementById('pauta-weight-info').innerText = `Peso: ${weight} kg`;
+
+            let textResult = "";
+
+            if (drugId === 'para' || drugId === 'ibu' || drugId === 'meta') {
+                const dose = parseFloat(document.getElementById(drugId + '-dose').value);
+                const presKey = document.getElementById(drugId + '-pres').value;
+                const config = drugConfig[drugId];
+                const pres = config.presentations[presKey];
+                let mg = getEffectiveMg(drugId, weight, dose);
+                let drugName = config.name;
+
+                if (pres.type === 'liq') {
+                    const mlValue = mg / pres.conc;
+                    textResult = `${drugName} ${pres.label}: ${formatPediatricVolume(mlValue)} ml cada 6-8 horas`;
+                } else {
+                    const typeText = drugId === 'meta' ? 'cápsula' : (presKey.includes('sobre') ? 'sobre' : 'comprimido');
+                    textResult = `${drugName} ${pres.label}: 1 ${typeText} cada 6-8 horas`;
+                }
+            }
+            
+            else if (drugId === 'salbu') {
+                const tec = document.getElementById('salbu-tec').value === 'mascarilla' ? 'cámara espaciadora y mascarilla' : 'cámara espaciadora y boquilla';
+                const header = `<b>Tratamiento de rescate</b> (SOLO si síntomas de tos seca repetitiva, dificultad respiratoria o pitos en el pecho): SALBUTAMOL pMDI 100mcg (cartucho AZUL) con ${tec}:`;
+                
+                if (weight < 9) {
+                    textResult = `${header} 2 inhalaciones cada 4-6-8 horas según dificultad respiratoria y hasta control por su pediatra.`;
+                } else if (weight < 12) {
+                    textResult = `${header} 2-3 inhalaciones cada 4-6-8 horas según dificultad respiratoria y hasta control por su pediatra.`;
+                } else {
+                    textResult = `${header} 2-4 inhalaciones cada 4-6-8 horas según dificultad respiratoria y hasta control por su pediatra.<br>- <b>Si persiste dificultad respiratoria</b> tras una 1ª tanda de 2-4 inhalaciones, se puede repetir esta dosis cada 20 minutos hasta un máximo de 3 veces. Si tras ello persiste dificultad respiratoria, o si la mejoría no se mantiene durante al menos 4 horas, acudir a su Centro de Salud o a Urgencias para valoración.`;
+                }
+            }
+
+            else if (drugId === 'corti') {
+                const drug = document.getElementById('corti-drug').value;
+                
+                if (drug === 'pred') {
+                    const dosePerKg = parseFloat(document.getElementById('pred-dose').value);
+                    const presVal = document.getElementById('pred-pres').value;
+                    const maxDaily = 50;
+                    let mg = weight * dosePerKg;
+                    if (mg > maxDaily) mg = maxDaily;
+
+                    let durationText = "";
+                    if (predDurationMode === 'days') {
+                        const d = document.getElementById('pred-days-input').value;
+                        if (!d) { alert("Introduzca días"); return; }
+                        durationText = `durante ${d} días`;
+                    } else {
+                        const d = document.getElementById('pred-date-input').value;
+                        if (!d) { alert("Introduzca fecha"); return; }
+                        const dateObj = new Date(d);
+                        durationText = `hasta el ${dateObj.getDate()}/${dateObj.getMonth()+1}/${dateObj.getFullYear()} inclusive`;
+                    }
+
+                    let drugLabel = "";
+                    let amountText = "";
+                    
+                    if (presVal === 'paidocort') {
+                        drugLabel = "PAIDOCORT jarabe 3 mg/ml";
+                        amountText = `${formatPediatricVolume(mg / 3)} ml`;
+                    } else if (presVal === 'estilsona') {
+                        drugLabel = "ESTILSONA jarabe 7 mg/ml";
+                        amountText = `${formatPediatricVolume(mg / 7)} ml`;
+                    } else {
+                        drugLabel = "PREDNISONA comprimidos 50 mg";
+                        amountText = "1 comprimido"; 
+                    }
+
+                    textResult = `${drugLabel}: ${amountText} cada 24 horas ${durationText}.`;
+
+                } else { // Dexa
+                    const ind = document.getElementById('dexa-ind').value;
+                    const dosePerKg = parseFloat(document.getElementById('dexa-dose').value);
+                    const presVal = document.getElementById('dexa-pres').value;
+                    
+                    let max = (ind === 'laringitis') ? 10 : 12;
+                    let mg = weight * dosePerKg;
+                    if (mg > max) mg = max;
+
+                    let amountText = "";
+                    let presLabel = "";
+
+                    if (presVal === 'dexa_jarabe') {
+                        presLabel = "DEXAMETASONA jarabe 1 mg/ml";
+                        amountText = `${formatPediatricVolume(mg)} ml`;
+                        if (ind === 'laringitis') {
+                            textResult = `${presLabel}: ${amountText} en dosis única.`;
+                        } else {
+                            textResult = `${presLabel}: ${amountText}, administrar hoy y repetir mañana.`;
+                        }
+                    } else {
+                        if (ind === 'laringitis') {
+                            textResult = "DEXAMETASONA comprimidos: 1 comprimido de 8 mg y 1/2 comprimido de 4 mg en dosis única.";
+                        } else {
+                            textResult = "DEXAMETASONA comprimidos 8 mg: 1 comprimido y medio de 8 mg, administrar hoy y repetir mañana.";
+                        }
+                    }
+                }
+            }
+
+            selectedMeds[drugId] = textResult;
+            renderPautaUI();
+            setButtonAdded(drugId);
+
+            if (selectedMeds.para || selectedMeds.ibu || selectedMeds.meta) {
+                document.getElementById('btn-toggle-fever').classList.remove('hidden');
+            }
+
+            const tabsNav = document.getElementById('tabs-navigation');
+            if (tabsNav) tabsNav.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+            // Lógica de Vistazo (Peek) - Corregida
+            clearTimeout(pautaPeekTimeout);
+            expandPauta();
+            pautaPeekTimeout = setTimeout(() => {
+                // Solo replegar si el ratón NO está encima del contenedor
+                if (!pautaContainer.matches(':hover')) {
+                    collapsePauta();
+                }
+            }, 1500); 
+        }
+
+        function renderPautaUI() {
+            let abx = "";
+            const pPara = selectedMeds.para;
+            const pIbu = selectedMeds.ibu;
+            const pMeta = selectedMeds.meta;
+            
+            let headerText = isPainOnlyMode ? "- <b>Si dolor:</b> " : "- <b>Si fiebre o dolor:</b> ";
+            let rescueTextStart = isPainOnlyMode ? "Si persiste dolor tras" : "Si persiste fiebre o dolor tras";
+            
+            let antiT = "";
+
+            if (pPara && pIbu && pMeta) {
+                antiT = `${headerText}${pPara}. Si fuera necesario, puede alternar cada 4 horas con ${pIbu}.<br>- <b>${rescueTextStart} una hora y media de haber administrado paracetamol/ibuprofeno</b>: ${pMeta}.`;
+            } else if (pPara && pIbu) {
+                antiT = `${headerText}${pPara}. Si fuera necesario, puede alternar cada 4 horas con ${pIbu}.`;
+            } else if (pMeta && (pPara || pIbu)) {
+                const base = pPara || pIbu;
+                antiT = `${headerText}${base}. Si fuera necesario, puede alternar cada 4 horas con ${pMeta}.`;
+            } else {
+                const active = [pPara, pIbu, pMeta].filter(v => v !== null);
+                if (active.length > 0) antiT = `${headerText}${active[0]}.`;
+            }
+
+            let resp = "";
+            const pCorti = selectedMeds.corti;
+            const pSalbu = selectedMeds.salbu;
+            
+            let respParts = [];
+            if (pCorti) respParts.push(`- ${pCorti}`); 
+            if (pSalbu) respParts.push(`- ${pSalbu}`);
+            
+            if (respParts.length > 0) resp = respParts.join("<br><br>");
+
+            let antiH = "";
+
+            let finalParts = [abx, antiT, resp, antiH].filter(x => x !== "");
+            let finalHTML = finalParts.join("<br><br>");
+
+            if (finalHTML) {
+                document.getElementById('pauta-text').innerHTML = finalHTML;
+                document.getElementById('pauta-container').classList.add('visible');
+            }
+        }
+
+        function copyAndReset() {
+            const pautaElement = document.getElementById('pauta-text');
+            const range = document.createRange();
+            range.selectNodeContents(pautaElement);
+            const selection = window.getSelection();
+            selection.removeAllRanges();
+            selection.addRange(range);
+
+            try {
+                document.execCommand('copy');
+            } catch (err) {
+                console.error('Fallo al copiar', err);
+            }
+
+            selection.removeAllRanges();
+            
+            selectedMeds = { para: null, ibu: null, meta: null, salbu: null, corti: null };
+            isPainOnlyMode = false;
+            document.getElementById('btn-toggle-fever').classList.add('hidden');
+            document.getElementById('weight').value = "";
+            document.getElementById('pauta-text').innerHTML = "";
+            document.getElementById('pauta-weight-info').innerText = ""; 
+            document.getElementById('pauta-container').classList.remove('visible');
+            document.getElementById('pred-days-input').value = "";
+            document.getElementById('pred-date-input').value = "";
+            expandPauta(); 
+            
+            document.querySelectorAll('select').forEach(sel => sel.selectedIndex = 0);
+            ['para', 'ibu', 'meta', 'salbu', 'corti'].forEach(id => resetButton(id));
+            updateCorticoideUI();
+            updateDrugUI('para'); updateDrugUI('ibu'); updateDrugUI('meta'); updateDrugUI('salbu'); updateDrugUI('corti');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+    </script>
+</body>
+</html>
